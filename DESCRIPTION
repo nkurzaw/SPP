@@ -1,0 +1,16 @@
+Package: SPP
+Title: FDR-controlled analysis of SPP experiments
+Version: 0.99.0
+Authors@R: person("Nils", "Kurzawa", email = "nils.kurzawa@embl.de",
+                  role = c("aut", "cre"))
+Maintainer: Nils Kurzawa <nils.kurzawa@embl.de>
+Description: FDR-controlled analysis of Solubility Proteome Profiling 
+  experiments by functional analysis of dose-response curves.
+License: GPL-3
+Encoding: UTF-8
+VignetteBuilder: knitr
+LazyData: true
+biocViews: Proteomics, DataImport, Software 
+Depends: R (>= 3.5.0), stats, dplyr
+Imports: ggplot2, tidyr
+Suggests: knitr, testthat
