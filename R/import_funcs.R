@@ -1,3 +1,44 @@
+#' @import dplyr
+annotateDataList <- function(dataList, geneNameVar, configLong,
+                             intensityStr, fcStr, minQupm){
+    # internal function to annotate list of 2D-TPP data subtables with
+    # information from config table
+    channel <- signal <- Temperature <- RefCol <- label <- 
+        conc <- unique_ID <- spread_var <- NULL
+    
+    combinedTab <- bind_rows(lapply(dataList, function(dat){
+        datLong <- dat %>% tbl_df() %>%
+            gather(channel, signal, matches(intensityStr), 
+                   matches(fcStr)) %>%
+            mutate(label = gsub(fcStr, "", gsub(intensityStr, "", 
+                                                channel))) %>%
+            left_join(configLong %>% 
+                          dplyr::select(Temperature, RefCol, label, 
+                                        Experiment, conc, replicate),
+                      by = c("temperature" = "Temperature", "label",
+                             "experiment" = "Experiment")) %>% 
+            group_by_(geneNameVar, "conc", "replicate") %>% 
+            filter(qupm == max(qupm)) %>% 
+            ungroup %>% 
+            filter(qupm >= minQupm)
+            
+    }))
+    return(combinedTab)
+}
+
+#' @import vsn
+#' @importFrom tidyr spread
+vsnNormalizeData <- function(datIn, idVar, intensityStr){
+    datSpread <- datIn %>% 
+        mutate(channel_rep = paste(channel, replicate, sep = "_")) %>% 
+        dplyr::select(representative, clustername, channel_rep, signal) %>% 
+        spread(channel_rep, signal)
+    
+    vsn_fit <- vsn::vsn2(as.matrix(datSpread[,-c(1,2)]))
+    vsnNorm <- vsn::predict(vsn_fit, as.matrix(datSpread[,-c(1,2)]))
+    datNorm <- 
+}
+
 #' Import SPP dataset using a config table
 #' 
 #' @param configTable character string of a file path to a config table
@@ -51,17 +92,18 @@
 #' 
 #' @import TPP2D
 #' @import dplyr
+#' @import tidyr
 #' @import vsn
 importSppDataset <- function(configTable, data,
                             idVar = "representative",
                             intensityStr = "sumionarea_protein_",
-                            fcStr = "rel_fc_protein_",
                             nonZeroCols = "qssm",
                             geneNameVar = "clustername",
                             addCol = NULL,
                             qualColName = "qupm",
                             naStrs = c("NA", "n/d", "NaN"),
                             concFactor = 1e6,
+                            minQupm = 2,
                             vsnNormalize = TRUE,
                             filterContaminants = TRUE){
     
@@ -72,10 +114,10 @@ importSppDataset <- function(configTable, data,
             factor(dense_rank(Experiment), 
                    levels = seq_len(length(unique(Experiment))))))
     
-    dataList <- import2dMain(configTable = configWide,
+    dataList <- TPP2D:::import2dMain(configTable = configWide,
                              data = data,
                              idVar = idVar,
-                             fcStr = fcStr,
+                             fcStr = NULL,
                              addCol = c(geneNameVar, addCol),
                              naStrs = naStrs,
                              intensityStr = intensityStr,
@@ -86,24 +128,20 @@ importSppDataset <- function(configTable, data,
                                  geneNameVar = geneNameVar,
                                  configLong = configLong,
                                  intensityStr = intensityStr,
-                                 fcStr = fcStr)
+                                 fcStr = fcStr,
+                                 minQupm = minQupm)
     
-    dataRatioChecked <- checkRatioRef(dataLong, idVar = idVar,
-                                      concFactor = concFactor)
-    
-    if(medianNormalizeFC){
-        message("Median normalizing fold changes...")
-        dataNorm <- medianNormalizeRatios(dataRatioChecked)
-    }else{
-        dataNorm <- dataRatioChecked
-    }
-    
-    dataOut <- renameColumns(dataNorm,
-                             idVar = idVar,
-                             geneNameVar = geneNameVar)
+    dataRenamed <- TPP2D:::renameColumns(dataLong = dataLong,
+                                         idVar = idVar,
+                                         geneNameVar = geneNameVar)
     
     if(filterContaminants){
-        dataOut <- filterOutContaminants(dataOut)
+        dataRenamed <- TPP2D:::filterOutContaminants(dataRenamed)
+    }
+    if(vsnNormalize){
+        
+    }else{
+        
     }
     
     return(dataOut)
