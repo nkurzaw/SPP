@@ -30,13 +30,23 @@ annotateDataList <- function(dataList, geneNameVar, configLong,
 #' @importFrom tidyr spread
 vsnNormalizeData <- function(datIn, idVar, intensityStr){
     datSpread <- datIn %>% 
-        mutate(channel_rep = paste(channel, replicate, sep = "_")) %>% 
+        mutate(channel_rep = paste(channel, replicate, sep = "__")) %>% 
         dplyr::select(representative, clustername, channel_rep, signal) %>% 
         spread(channel_rep, signal)
     
     vsn_fit <- vsn::vsn2(as.matrix(datSpread[,-c(1,2)]))
     vsnNorm <- vsn::predict(vsn_fit, as.matrix(datSpread[,-c(1,2)]))
-    datNorm <- 
+    datNorm <- cbind(datSpread[,c(1,2)], 2^vsnNorm)
+    datNormLong <- as_tibble(datNorm) %>% 
+        gather(channel_rep, norm_signal, -representative, -clustername) %>% 
+        separate(channel_rep, c("channel", "replicate"), sep = "__") %>% 
+        mutate(replicate = as.factor(replicate))
+    
+    out_df <- left_join(datIn, datNormLong, 
+              by = c("representative", "clustername", 
+                     "channel", "replicate")) %>% 
+        mutate(log2_signal = log2(norm_signal))
+    return(out_df)
 }
 
 #' Import SPP dataset using a config table
@@ -139,10 +149,12 @@ importSppDataset <- function(configTable, data,
         dataRenamed <- TPP2D:::filterOutContaminants(dataRenamed)
     }
     if(vsnNormalize){
-        
+        dataNorm <- vsnNormalizeData(dataRenamed, idVar = idVar, 
+                                     intensityStr = intensityStr)
     }else{
-        
+        dataNorm <- dataRenamed %>% 
+            mutate(log2_signal = log2(signal))
     }
     
-    return(dataOut)
+    return(dataNorm)
 }
